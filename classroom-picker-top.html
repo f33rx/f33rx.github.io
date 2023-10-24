@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Classroom Allocator 5000</title>
+    <style>
+        /* Style elements for improved readability and UX */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+        h1, h2 {
+            font-size: 1.5em;
+        }
+        select {
+            font-size: 1.2em;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        button {
+            font-size: 1.2em;
+            padding: 10px 20px;
+            margin-top: 20px;
+            cursor: pointer;
+        }
+        pre {
+            font-size: 1.2em;
+        }
+        div {
+            margin-bottom: 20px;
+        }
+
+        /* Style for explanation overlay */
+        #aboutOverlay {
+            display:none;
+            position:fixed;
+            top:0;
+            left:0;
+            width:100%;
+            height:100%;
+            background:rgba(0,0,0,0.7);
+            z-index:1000;
+            display: flex;
+            align-items: left;
+            justify-content: left;
+        }
+
+        /* Content inside the overlay */
+        #aboutOverlay div {
+            background:white;
+            padding:20px;
+            width:50%;
+        }
+
+        @media only screen and (max-width: 768px) {
+            /* Increase font size for better readability */
+            body {
+                font-size: 18px;
+            }
+        }
+    </style>
+    <script>
+        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+            document.querySelector('meta[name="viewport"]').setAttribute('content', 'width=device-width, initial-scale=5');
+        }
+    </script>    
+</head>
+<body>
+
+<h1>Pick your rooms.</h1>
+
+<!-- Voting Forms for Persons -->
+<div id="forms">
+    <!-- Forms will be generated here -->
+</div>
+
+<!-- About Button -->
+<button onclick="showAbout()">How it works.</button>
+
+<!-- Explanation Overlay -->
+<div id="aboutOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:1000;">
+    <div style="margin:15% auto; background:white; padding:20px; width:50%;">
+        <h2>How This Works</h2>
+        <p>
+            Each person chooses their preferred room from a drop-down menu.
+            After submitting the votes, the system allocates rooms based on the following steps:
+        </p>
+        <ol>
+            <li>Tally First-Choice Votes</li>
+            <li>Eliminate Least Voted Rooms</li>
+            <li>Allocate Available Rooms</li>
+        </ol>
+        <p>
+            In case of a tie, a random roll determines the winner.
+        </p>
+        <button onclick="hideAbout()">Close</button>
+    </div>
+</div>
+
+
+<!-- Submit Button -->
+<button onclick="submitVotes()">Submit</button>
+
+
+<h2>Results:</h2>
+<pre id="result"></pre>
+
+<script>
+    // Initialize global variables
+    const rooms = ["Room1", "Room2", "Room3", "Room4", "Room5"];
+    const numPersons = 4;
+    const ballots = {};
+
+    function generateForms() {
+        let formHtml = '';
+        for (let i = 1; i <= numPersons; i++) {
+            const defaultName = `Person${i}`;
+            formHtml += `
+            <div>
+                <h2 id="${defaultName}-name" contentEditable="true" onblur="updateName('${defaultName}')"                >${defaultName}</h2>
+                <select id="${defaultName}-select">
+                    ${rooms.map(room => `<option value="${room}">${room}</option>`).join('')}
+                </select>
+            </div>`;
+            // Initialize default ballots
+            ballots[defaultName] = [rooms[0]]; // set the first room as the default value
+        }
+        document.getElementById('forms').innerHTML = formHtml;
+    }
+    
+    // Function to update the name of the person
+    function updateName(oldName) {
+        const newName = document.getElementById(`${oldName}-name`).textContent;
+        if (newName !== '' && newName !== oldName) {
+            // Update the ballots
+            ballots[newName] = ballots[oldName];
+            delete ballots[oldName];
+            
+            // Update the ID attributes in HTML elements
+            document.getElementById(`${oldName}-name`).id = `${newName}-name`;
+            document.getElementById(`${oldName}-select`).id = `${newName}-select`;
+        }
+    }
+    
+    
+
+    // Function to show the explanation overlay
+    function showAbout() {
+        document.getElementById("aboutOverlay").style.display = "block";
+    }
+
+    // Function to hide the explanation overlay
+    function hideAbout() {
+        document.getElementById("aboutOverlay").style.display = "none";
+    }
+
+    // Function to submit votes and perform room allocation
+    function submitVotes() {
+        // Reset ballots object
+        const formDivs = document.querySelectorAll("#forms > div");
+        formDivs.forEach(div => {
+            const h2 = div.querySelector("h2");
+            const select = div.querySelector("select");
+            const currentName = h2.textContent;
+            const currentChoice = select.value;
+            ballots[currentName] = [currentChoice];
+        });
+
+        // Collect votes
+        Object.keys(ballots).forEach((personKey) => {
+            const choice = document.getElementById(`${personKey}-select`).value;
+            ballots[personKey] = [choice];
+        });
+
+        // Step 1: Tally First-Choice Votes
+        const firstChoiceTally = {};
+        rooms.forEach(room => firstChoiceTally[room] = 0);
+
+        for (const [person, choices] of Object.entries(ballots)) {
+            const firstChoice = choices[0];
+            firstChoiceTally[firstChoice] += 1;
+        }
+
+        // Step 2: Eliminate Least Voted Rooms
+        const minVotes = Math.min(...Object.values(firstChoiceTally));
+        const remainingRooms = rooms.filter(room => firstChoiceTally[room] >= minVotes);
+
+        // Step 3: Allocate Available Rooms
+        const allocations = {};
+        const tieCases = {};
+        const tieWinners = {};
+
+        remainingRooms.forEach(room => {
+            const contenders = Object.keys(ballots).filter(person => ballots[person][0] === room);
+            if (contenders.length === 1) {
+                allocations[contenders[0]] = room;
+            } else if (contenders.length > 1) {
+                const winner = contenders[Math.floor(Math.random() * contenders.length)];
+                allocations[winner] = room;
+                tieCases[room] = contenders;
+                tieWinners[room] = winner;
+            }
+        });
+
+        // Include everyone else who didn't have a tie
+        for (const [person, choices] of Object.entries(ballots)) {
+            if (!allocations[person]) {
+                allocations[person] = choices[0];
+            }
+        }
+
+        // Display Results
+        let resultText = "Allocations:\n";
+        resultText += JSON.stringify(allocations, null, 2);
+        if (Object.keys(tieCases).length > 0) {
+            resultText += "\n\nTie Cases:\n";
+            resultText += JSON.stringify(tieCases, null, 2);
+            resultText += "\n\nTie Winners:\n";
+            resultText += JSON.stringify(tieWinners, null, 2);
+        }
+        document.getElementById('result').textContent = resultText;
+    }
+
+    // Initialize the app by generating the forms
+    generateForms();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Classroom Allocator 5000</title>
+    <style>
+        /* Style elements for improved readability and UX */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        h1, h2 {
+            font-size: 1.5em;
+        }
+        select, button {
+            font-size: 1.2em;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        button.block-button {
+            display: block;
+            margin-top: 10px;
+            margin-bottom: 10px;
+        }
+        pre {
+            font-size: 1.2em;
+        }
+        div {
+            margin-bottom: 20px;
+        }
+
+        /* Style for explanation overlay */
+        #aboutOverlay {
+            display:none;
+            position:fixed;
+            top:0;
+            left:0;
+            width:100%;
+            height:100%;
+            background:rgba(0,0,0,0.7);
+            z-index:1000;
+        }
+
+        /* Content inside the overlay */
+        #aboutOverlay div {
+            background:white;
+            padding:20px;
+            width:50%;
+        }
+
+        @media only screen and (max-width: 768px) {
+            /* Increase font size for better readability */
+            body {
+                font-size: 18px;
+            }
+        }
+    </style>
+    <script>
+        // Ensure viewport adjusts for mobile devices
+        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+            document.querySelector('meta[name="viewport"]').setAttribute('content', 'width=device-width, initial-scale=1');
+        }
+    </script>    
+</head>
+<body>
+
+    <!-- Main Header -->
+    <h1>Pick your rooms.</h1>
+
+    <!-- Placeholder for the voting forms -->
+    <div id="forms"></div>
+
+    <!-- Button to show "How it works" overlay -->
+    <button onclick="showAbout()">How it works.</button>
+
+    <!-- About overlay with explanation -->
+    <div id="aboutOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:1000;">
+        <div style="margin:15% auto; background:white; padding:20px; width:50%;">
+            <h2>How This Works</h2>
+            <p>
+                Each person ranks their preferred rooms from a series of drop-down menus.
+                After submitting the votes, the system allocates rooms based on the following steps:
+            </p>
+            <ol>
+                <li>Tally Ranked-Choice Votes: For each room, each person's ranking is considered.</li>
+                <li>Allocate Based on Ranking: Rooms are allocated to the person who ranked it the highest.</li>
+                <li>Random Tie-Breaking: In case multiple persons rank the same room equally high, a random roll determines the winner.</li>
+            </ol>
+            <p>
+                If any persons are left without a room after all allocations, they are labeled as "No Room."
+            </p>
+            <button onclick="hideAbout()">Close</button>
+        </div>
+    </div>
+
+    <!-- Button to toggle output details -->
+    <button id="toggleButton" class="block-button" onclick="toggleOutput()">Details</button>
+
+    <!-- Button to submit votes -->
+    <button class="block-button" onclick="submitVotes()">Submit</button>
+
+    <!-- Placeholder for the results -->
+    <h2>Results:</h2>
+    <pre id="result"></pre>
+
+<script>
+    // Initialize global variables
+    const rooms = ["Room1", "Room2", "Room3", "Room4", "Room5"];
+    const numPersons = 4;
+    const ballots = {};
+
+    function generateForms() {
+        let formHtml = '';
+        for (let i = 1; i <= numPersons; i++) {
+            const defaultName = `Person${i}`;
+            formHtml += `<div>
+                <h2 id="${defaultName}-name" contentEditable="true" onblur="updateName('${defaultName}')">${defaultName}</h2>
+                <select id="${defaultName}-select-1">${rooms.map(room => `<option value="${room}">${room}</option>`).join('')}</select>
+                <select id="${defaultName}-select-2">${rooms.map(room => `<option value="${room}">${room}</option>`).join('')}</select>
+                <select id="${defaultName}-select-3">${rooms.map(room => `<option value="${room}">${room}</option>`).join('')}</select>
+            </div>`;
+            // Initialize default ballots
+            ballots[defaultName] = [rooms[0], rooms[1], rooms[2]];
+        }
+        document.getElementById('forms').innerHTML = formHtml;
+        
+        // Disable the "Details" button as nothing is defined yet
+        document.getElementById("toggleButton").disabled = true; 
+    }
+    
+    function updateName(oldName) {
+        const newName = document.getElementById(`${oldName}-name`).textContent;
+        if (newName !== '' && newName !== oldName) {
+            ballots[newName] = ballots[oldName];
+            delete ballots[oldName];
+            
+            // Update the ID attributes in HTML elements
+            document.getElementById(`${oldName}-name`).id = `${newName}-name`;
+            for (let i = 1; i <= 3; i++) {
+                document.getElementById(`${oldName}-select-${i}`).id = `${newName}-select-${i}`;
+            }
+        }
+    }
+
+    function showAbout() {
+        document.getElementById("aboutOverlay").style.display = "block";
+    }
+
+    function hideAbout() {
+        document.getElementById("aboutOverlay").style.display = "none";
+    }
+
+    let showDetails = false;
+
+    function toggleOutput() {
+        showDetails = !showDetails;
+        if (showDetails) {
+            document.getElementById('result').textContent = window.output.detailedText;
+        } else {
+            document.getElementById('result').textContent = window.output.simpleText;
+        }
+    }
+
+    function generateOutputText(allocations, details) {
+    let outputText = '';
+
+    rooms.forEach((room) => {
+        const person = Object.keys(allocations).find(p => allocations[p] === room);
+        if (!person) {
+            outputText += `No votes for ${room}.\n`;
+            return;
+        }
+
+        const detail = details[person];
+        if (detail.tie) {
+            outputText += `${person} gets ${room} (random tiebreaker among [${detail.tieParticipants.join(', ')}]).\n`;
+        } else {
+            outputText += `${person} gets ${room} (highest rank).\n`;
+        }
+    });
+
+    Object.keys(allocations).forEach((person) => {
+        if (allocations[person] === 'No Room') {
+            outputText += `${person} gets No Room.\n`;
+        }
+    });
+
+    return outputText;
+}
+
+
+function submitVotes() {
+    // Reset the ballots and collect votes with ranking
+    Object.keys(ballots).forEach((personKey) => {
+        const choices = [
+            document.getElementById(`${personKey}-select-1`).value,
+            document.getElementById(`${personKey}-select-2`).value,
+            document.getElementById(`${personKey}-select-3`).value,
+        ];
+        ballots[personKey] = choices;
+    });
+
+    // Allocation Logic
+    const allocations = {};
+    const details = {};  // Store additional details like tie-breaker and choice used
+    const remainingPersons = [...Object.keys(ballots)];
+
+    rooms.forEach((room) => {
+        const votesForRoom = remainingPersons.map(person => ({
+            person,
+            rank: ballots[person].indexOf(room),
+        })).filter(({ rank }) => rank !== -1);
+
+        votesForRoom.sort((a, b) => a.rank - b.rank);
+
+        if (votesForRoom.length === 0) return;
+
+        const topRank = votesForRoom[0].rank;
+        const topVoters = votesForRoom.filter(v => v.rank === topRank).map(v => v.person);
+
+        if (topVoters.length === 1) {
+            allocations[topVoters[0]] = room;
+            details[topVoters[0]] = {tie: false, choice: topRank + 1};  // Store choice used
+            remainingPersons.splice(remainingPersons.indexOf(topVoters[0]), 1);
+        } else {
+            const winner = topVoters[Math.floor(Math.random() * topVoters.length)];
+            allocations[winner] = room;
+            details[winner] = {tie: true, tieParticipants: topVoters, winner: winner, choice: topRank + 1};  // Store tie-breaker details and choice used
+            remainingPersons.splice(remainingPersons.indexOf(winner), 1);
+        }
+    });
+
+    // Allocate remaining rooms to remaining persons
+    remainingPersons.forEach((person) => {
+        if (!allocations[person]) {
+            allocations[person] = "No Room";
+            details[person] = {tie: false, choice: null};  // No choice used
+        }
+    });
+
+    // Generate the output text
+    const simpleText = generateOutputText(allocations, details);
+    const detailedText = `Allocations:\n${JSON.stringify(allocations, null, 2)}\n\nDetails:\n${JSON.stringify(details, null, 2)}`;
+    
+    // Save the output for later toggling
+    window.output = { simpleText, detailedText };
+
+    // Display the output text based on the showDetails flag
+    if (showDetails) {
+        document.getElementById('result').textContent = detailedText;
+    } else {
+        document.getElementById('result').textContent = simpleText;
+    }
+    
+    // Enable the "Details" button as votes have been submitted
+    document.getElementById("toggleButton").disabled = false;
+}
+
+// Initialize an empty output object for saving results
+window.output = { simpleText: "", detailedText: "" };
+
+// Initialize the app by generating the forms
+generateForms();
+</script>
+
+
+</body>
+</html>
